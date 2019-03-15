@@ -8,7 +8,6 @@ Works with Godot engine 2.1 documentation (needs to be updated for 3+).
 
 ### Setup
 
-Checkout godot engine v2 in the parent folder. This will open the documentation and parse it.
 Your code have to use spaces (no tabs) using 2 spaces only
 
 ### Run
@@ -19,7 +18,6 @@ Then run:
 ```sh
 # Directory tree example
 # root/
-# - godot/
 # - yourGame/ <= you are here
 # - gdlinter/
 node ../gdlinter/index.js
@@ -32,4 +30,3 @@ node ../gdlinter/index.js
 - Add support for Godot Engine 3+
 - Produce an XML output
 - Improve rules definitions
-

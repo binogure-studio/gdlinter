@@ -1,6 +1,5 @@
 {
   "indentation": "  ",
   "documentation": "classes.xml",
-  "debug": false,
-  "default_dir": "game/"
+  "debug": false
 }

@@ -19,6 +19,7 @@ Then run:
 ```sh
 # Directory tree example
 # root/
+# - godot/
 # - yourGame/ <= you are here
 # - gdlinter/
 node ../gdlinter/index.js

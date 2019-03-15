@@ -1,0 +1,21 @@
+{
+  "name": "gdlinter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "lodash": "^4.17.11",
+    "pcre.js": "0.0.1",
+    "re2": "^1.8.4",
+    "xml2json": "^0.11.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}

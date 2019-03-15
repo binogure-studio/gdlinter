@@ -2,19 +2,23 @@
   "name": "gdlinter",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "lib/index.js",
   "directories": {
     "test": "test"
   },
+  "scripts": {
+    "lint": "node_modules/.bin/standard",
+    "start": "NODE_CONFIG_DIR=${CWD} node lib/index.js"
+  },
   "dependencies": {
+    "config": "^3.0.1",
     "lodash": "^4.17.11",
     "pcre.js": "0.0.1",
     "re2": "^1.8.4",
     "xml2json": "^0.11.2"
   },
-  "devDependencies": {},
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "devDependencies": {
+    "standard": "^12.0.1"
   },
   "author": "",
   "license": "ISC"

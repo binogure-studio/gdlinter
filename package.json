@@ -8,7 +8,8 @@
   },
   "scripts": {
     "lint": "node_modules/.bin/standard",
-    "start": "NODE_CONFIG_DIR=${CWD} node lib/index.js"
+    "start": "NODE_CONFIG_DIR=${CWD} node lib/index.js",
+    "test": "mocha test/**/*.js"
   },
   "dependencies": {
     "config": "^3.0.1",
@@ -18,6 +19,8 @@
     "xml2json": "^0.11.2"
   },
   "devDependencies": {
+    "chai": "^4.2.0",
+    "mocha": "^6.0.2",
     "standard": "^12.0.1"
   },
   "author": "",

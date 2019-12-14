@@ -10,7 +10,7 @@ I want to use a third party IDE, and I'm tired of having to use the Godot Editor
 
 ```sh
 sudo apt-get install python3
-sudo pip3 install lark
+sudo pip3 install lark-parser
 ```
 
 ## Usage

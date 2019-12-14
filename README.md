@@ -26,7 +26,7 @@ python3 ./parser.py path-to-file.gd
 - [ ] Parse `for` statement
 - [ ] Parse `while` statement
 - [ ] Parse `if` statement
-- [-] Parse `expr` statement (partial)
+- [x] *Parse `expr` statement (partial)
 - [x] Parse function definition
 - [x] Parse var/const/enum declaration
 - [x] Parse `return` statement

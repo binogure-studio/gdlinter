@@ -19,6 +19,10 @@ sudo pip3 install lark
 python3 ./parser.py path-to-file.gd
 ```
 
+## Contribute
+
+[See Lark](https://github.com/lark-parser/lark)
+
 ## TODO
 
 - [x] Lark grammar for GDscript

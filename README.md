@@ -36,5 +36,5 @@ python3 ./parser.py path-to-file.gd
 - [x] Parse `return` statement
 - [x] Detect variable shadowing
 - [x] Detect undefined variable usage (simple)
-- [ ] Detect undefined variable usage (deep check)
+- [x] Detect undefined variable usage (deep check)
 - [ ] Detect unused variables

@@ -15,11 +15,13 @@ eval_input: testlist _NEWLINE*
 
 decorator: "@" dotted_name [ "(" [arguments] ")" ] _NEWLINE
 decorators: decorator+
-decorated: decorators (funcdef | static_funcdef)
+decorated: decorators (funcdef | static_funcdef | classdef | signaldef)
 
 tooldef: "tool" -> tool
 static_funcdef: "static" funcdef
-funcdef: "func" NAME "(" parameters? ")" ":" suite
+funcdef: "func" NAME "(" parameters? ")" [funcdef_extend] ":" suite
+funcdef_extend: "." "(" parameters? ")"
+signaldef: "signal" NAME "(" parameters? ")" -> signal
 
 parameters: paramvalue ("," paramvalue)*
 
@@ -58,7 +60,7 @@ const_stmt: "const" NAME "=" test -> const
 global_stmt: "global" NAME ("," NAME)*
 assert_stmt: "assert" test ["," test]
 
-compound_stmt: if_stmt | while_stmt | for_stmt | funcdef | classdef | decorated
+compound_stmt: if_stmt | while_stmt | for_stmt | funcdef | classdef | signaldef | decorated
 if_stmt: "if" test ":" suite ("elif" test ":" suite)* ["else" ":" suite]
 while_stmt: "while" test ":" suite ["else" ":" suite]
 for_stmt: "for" exprlist "in" testlist ":" suite ["else" ":" suite]
@@ -113,8 +115,8 @@ exprlist: expr ("," expr)* [","]
 testlist: test ("," test)* [","]
 dictorsetmaker: ( (test (":" | "=") test (comp_for | ("," test (":" | "=") test)* [","])) | (test (comp_for | ("," test)* [","])) )
 
-classdef: "class" NAME ["(" [arguments] ")"] extenddef? ":" suite
-extenddef: "extends" NAME
+classdef: "class" NAME extenddef? ":" suite
+extenddef: "extends" (NAME | STRING)
 
 arguments: argvalue ("," argvalue)*
          | test comp_for

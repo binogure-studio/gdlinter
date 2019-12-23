@@ -1,4 +1,8 @@
 import xml.etree.ElementTree as ET
+import os, os.path
+
+__real_file__ = os.path.realpath(__file__)
+__path__ = os.path.dirname(__real_file__)
 
 def _extract_context(element, subcontext):
   for item in element:
@@ -63,6 +67,7 @@ def _extract_context(element, subcontext):
           subcontext[signal_name].append(subitem.attrib['type'])
 
 def get_context():
+  os.chdir(__path__)
   tree = ET.parse('classes.xml')
   root = tree.getroot()
 

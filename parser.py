@@ -1,6 +1,7 @@
+#!/usr/bin/python3
 import json
 import functools
-import sys
+import getopt, sys
 import os, os.path
 from io import open
 import glob, time
@@ -9,20 +10,19 @@ import godot_loader
 from lark import Lark, UnexpectedInput, Tree, Token
 from lark.indenter import Indenter
 
-# __path__ = os.path.dirname(__file__)
+__real_file__ = os.path.realpath(__file__)
+__path__ = os.path.dirname(__real_file__)
 
-class PythonIndenter(Indenter):
+debug_mode = False
+global_context = godot_loader.get_context()
+
+class GDScriptIndenter(Indenter):
   NL_type = '_NEWLINE'
   OPEN_PAREN_types = ['LPAR', 'LSQB', 'LBRACE']
   CLOSE_PAREN_types = ['RPAR', 'RSQB', 'RBRACE']
   INDENT_type = '_INDENT'
   DEDENT_type = '_DEDENT'
-  tab_len = 8
-
-global_context = godot_loader.get_context()
-
-kwargs = dict(rel_to = __file__, postlex = PythonIndenter(), start = 'file_input')
-gd_parser = Lark.open('gd.lark', parser = 'lalr', **kwargs)
+  tab_len = 2
 
 def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'const', 'enum', 'func', 'class']):
   extended_classes = [global_context['extend']] if 'extend' in global_context else []
@@ -68,8 +68,13 @@ def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'c
 
   return None, None
 
-def _check_func_call(name, arguments):
-  print('Calling function %s with arguments: %s' % (name, arguments))
+def _output_debug(*args, **kwargs):
+  if debug_mode:
+    print(*args, **kwargs)
+
+def _check_func_call(child, name, arguments):
+  _output_debug(child)
+  _output_debug('Calling function %s with arguments: %s' % (name, arguments))
   pass
 
 def _deep_check(children, local_context, item_type):
@@ -180,17 +185,17 @@ def _check_attr(children, global_context_path):
         error_message = ('%s not found' % (first_item.value))
         _output_message('error', first_item, error_message)
     else:
-      print('Token: %s' % (first_item))
+      _output_debug('Token: %s' % (first_item))
       # exit(0)
   elif isinstance(first_item, Tree):
     if first_item.data == 'funccall':
       return _check_attr(first_item.children, global_context_path)
 
     else:
-      print('?: %s, %s' % (first_item.children[0], global_context_path))
-      exit(0)
+      _output_debug('?: %s, %s' % (first_item.children[0], global_context_path))
+      _output_debug(0)
   else:
-    print('?: %s, %s' % (first_item, global_context_path))
+    _output_debug('?: %s, %s' % (first_item, global_context_path))
     exit(0)
 
 def _extract_enum(acc, token):
@@ -219,6 +224,8 @@ def _extract_assignation(children, global_context_path):
       fc_arguments = []
       index = 0
 
+      # TODO
+      # Not working correctly
       for child in children.children:
         if index == 0:
           fc_name, _ = _extract_assignation(child, global_context_path)
@@ -228,7 +235,7 @@ def _extract_assignation(children, global_context_path):
           fc_arguments.append(arg_name)
         index += 1
 
-      _check_func_call(fc_name, fc_arguments)
+      _check_func_call(children, fc_name, fc_arguments)
 
       if fc_name == 'keys' or fc_name =='values':
         fc_type = 'Array'
@@ -370,6 +377,10 @@ def assign_var(children, global_context_path):
     assign_var(children[0].children, global_context_path)
 
 def _output_message(level, node, message):
+  # Skip debug message
+  if level == 'debug' and not debug_mode:
+    return
+
   print('%s:%d:%d:%s' % (
     level,
     node.line,
@@ -491,10 +502,10 @@ def analyze_tree(tree, context, context_path = []):
       pass
 
     else:
-      print(context_path)
-      print(global_context)
-      print(child.data)
-      print(child.children)
+      _output_debug(context_path)
+      _output_debug(global_context)
+      _output_debug(child.data)
+      _output_debug(child.children)
       # exit(0)
 
 def _read(fn, *args):
@@ -514,8 +525,32 @@ def _get_lib_path():
   else:
     return [x for x in sys.path if x.endswith('%s.%s' % sys.version_info[:2])][0]
 
-if __name__ == '__main__':
-  input_text = _read(sys.argv[1]) + '\n'
+
+def usage():
+  print('\nGDScript\n')
+  print('Usage: %s [-d] <file>' % (sys.argv[0]))
+
+def main():
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], 'd')
+
+    if len(args) != 1:
+      usage()
+
+      return 2
+
+    for o, a in opts:
+      if o == '-d': debug_mode = True
+  except getopt.GetoptError:
+    usage()
+
+    return 2
+
+  os.chdir(__path__)
+  kwargs = dict(rel_to = __real_file__, postlex = GDScriptIndenter(), start = 'file_input')
+  gd_parser = Lark.open('gd.lark', parser = 'lalr', **kwargs)
+
+  input_text = _read(args[0]) + '\n'
 
   try:
     parsed_file = gd_parser.parse(input_text)
@@ -523,4 +558,7 @@ if __name__ == '__main__':
     analyze_tree(parsed_file, global_context)
     # print(json.dumps(global_context, sort_keys = True, indent = 2))
   except UnexpectedInput as error:
-    print('%d:%d:%s' % (error.line, error.column, error.get_context(input_text)))
+    _output_message('fatal', error, error.get_context(input_text))
+
+if __name__ == '__main__':
+  main()

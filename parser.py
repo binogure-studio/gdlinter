@@ -15,6 +15,7 @@ __path__ = os.path.dirname(__real_file__)
 
 debug_mode = False
 global_context = godot_loader.get_context()
+_attributes_to_check = []
 
 class GDScriptIndenter(Indenter):
   NL_type = '_NEWLINE'
@@ -24,7 +25,7 @@ class GDScriptIndenter(Indenter):
   DEDENT_type = '_DEDENT'
   tab_len = 2
 
-def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'const', 'enum', 'func', 'class']):
+def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'const', 'enum', 'func', 'class', 'signal']):
   extended_classes = [global_context['extend']] if 'extend' in global_context else []
 
   for context_key in items_to_check:
@@ -107,7 +108,7 @@ def _deep_check(children, local_context, item_type):
 
         if var_type != None:
           relative_context = var_context[var_type][item_type]
-          look_for_items = ['var', 'const', 'func', 'enum']
+          look_for_items = ['var', 'const', 'func', 'enum', 'signal']
           child_value = children[1].value
 
           for item_to_check in look_for_items:
@@ -137,7 +138,7 @@ def _deep_check(children, local_context, item_type):
     item_found = len(children) < 2
 
     if not item_found:
-      subitem_types = ['var', 'const', 'enum', 'func']
+      subitem_types = ['var', 'const', 'enum', 'func', 'signal']
       item_name = children[1].value
       relative_context_str += '.%s' % (item_name)
 
@@ -262,7 +263,10 @@ def _extract_assignation(children, global_context_path):
       return {}, 'Dictionary'
 
     elif children.data == 'getattr':
-      _check_attr(children.children, global_context_path)
+      _attributes_to_check.append({
+        'child': children.children,
+        'context': [] + global_context_path
+      })
 
       return _extract_assignation(children.children[0], global_context_path)
 
@@ -292,7 +296,8 @@ def _extract_assignation(children, global_context_path):
         item_type = children.value
 
       elif local_key == 'func':
-        item_type = local_context[local_key][children.value]['return']
+        if 'return' in local_context[local_key][children.value]:
+          item_type = local_context[local_key][children.value]['return']
 
       elif local_key == 'enum':
         item_type = 'int'
@@ -484,7 +489,10 @@ def analyze_tree(tree, context, context_path = []):
       pass
 
     elif child.data == 'funccall':
-      pass
+      _attributes_to_check.append({
+        'child': child,
+        'context': [] + context_path
+      })
 
     elif child.data == 'for_stmt':
       pass
@@ -507,6 +515,10 @@ def analyze_tree(tree, context, context_path = []):
       _output_debug(child.data)
       _output_debug(child.children)
       # exit(0)
+
+def check_context():
+  for _attribute_to_check in _attributes_to_check:
+    _check_attr(_attribute_to_check['child'], _attribute_to_check['context'])
 
 def _read(fn, *args):
   kwargs = {
@@ -556,6 +568,7 @@ def main():
     parsed_file = gd_parser.parse(input_text)
 
     analyze_tree(parsed_file, global_context)
+    check_context()
     # print(json.dumps(global_context, sort_keys = True, indent = 2))
   except UnexpectedInput as error:
     _output_message('fatal', error, error.get_context(input_text))

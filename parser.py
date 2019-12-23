@@ -26,6 +26,8 @@ class GDScriptIndenter(Indenter):
   tab_len = 2
 
 def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'const', 'enum', 'func', 'class', 'signal']):
+  global global_context
+
   extended_classes = [global_context['extend']] if 'extend' in global_context else []
 
   for context_key in items_to_check:
@@ -70,6 +72,8 @@ def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'c
   return None, None
 
 def _output_debug(*args, **kwargs):
+  global debug_mode
+
   if debug_mode:
     print(*args, **kwargs)
 
@@ -194,7 +198,7 @@ def _check_attr(children, global_context_path):
 
     else:
       _output_debug('?: %s, %s' % (first_item.children[0], global_context_path))
-      _output_debug(0)
+      # exit(0)
   else:
     _output_debug('?: %s, %s' % (first_item, global_context_path))
     exit(0)
@@ -206,12 +210,16 @@ def _extract_enum(acc, token):
   return acc
 
 def _is_class_name(class_name):
+  global global_context
+
   return class_name in global_context['class']
 
 def _get_item_type():
   pass
 
 def _extract_assignation(children, global_context_path):
+  global _attributes_to_check
+
   if isinstance(children, list):
     children = children[0]
 
@@ -313,6 +321,8 @@ def _extract_assignation(children, global_context_path):
   return None, None
 
 def _check_duplicate(item_type, item_context, item_name, global_context_path):
+  global global_context
+
   items_to_check = ['var', 'const', 'enum', 'func', 'class']
   error_detected = False
 
@@ -382,6 +392,8 @@ def assign_var(children, global_context_path):
     assign_var(children[0].children, global_context_path)
 
 def _output_message(level, node, message):
+  global debug_mode
+
   # Skip debug message
   if level == 'debug' and not debug_mode:
     return
@@ -394,6 +406,9 @@ def _output_message(level, node, message):
   ))
 
 def analyze_tree(tree, context, context_path = []):
+  global global_context
+  global _attributes_to_check
+
   for child in tree.children:
     if child.data == 'tool' or child.data == 'noop':
       continue
@@ -517,6 +532,8 @@ def analyze_tree(tree, context, context_path = []):
       # exit(0)
 
 def check_context():
+  global _attributes_to_check
+
   for _attribute_to_check in _attributes_to_check:
     _check_attr(_attribute_to_check['child'], _attribute_to_check['context'])
 
@@ -537,12 +554,14 @@ def _get_lib_path():
   else:
     return [x for x in sys.path if x.endswith('%s.%s' % sys.version_info[:2])][0]
 
-
 def usage():
   print('\nGDScript\n')
   print('Usage: %s [-d] <file>' % (sys.argv[0]))
 
 def main():
+  global debug_mode
+  global global_context
+
   try:
     opts, args = getopt.getopt(sys.argv[1:], 'd')
 
@@ -552,7 +571,9 @@ def main():
       return 2
 
     for o, a in opts:
-      if o == '-d': debug_mode = True
+      if o == '-d':
+        debug_mode = True
+
   except getopt.GetoptError:
     usage()
 

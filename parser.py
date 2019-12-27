@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 import json
+import configparser
 import functools
 import getopt, sys
 import os, os.path
@@ -13,6 +14,7 @@ from lark.indenter import Indenter
 __real_file__ = os.path.realpath(__file__)
 __path__ = os.path.dirname(__real_file__)
 
+project_file = None
 debug_mode = False
 global_context = godot_loader.get_context()
 _attributes_to_check = []
@@ -346,7 +348,7 @@ def _check_duplicate(item_type, item_context, item_name, global_context_path):
         break
 
   if error_detected:
-    error_message = ('\'%s %s\' shadowing' % (item_type, item_name))
+    error_message = ('\'%s\' shadowing' % (item_name))
     _output_message('error', item_context.children[0], error_message)
 
 def _extract_var(children):
@@ -377,7 +379,7 @@ def assign_var(children, global_context_path):
       relative_context_key, relative_context = _get_context(var_name, global_context_path)
 
       if relative_context_key == None:
-        error_message = '\'%s %s\' not defined' % ('var', var_name)
+        error_message = '\'%s\' not defined' % (var_name)
         _output_message('error', children[0], error_message)
 
       else:
@@ -556,16 +558,16 @@ def _get_lib_path():
 
 def usage():
   print('\nGDScript\n')
-  print('Usage: %s [-d] <file>' % (sys.argv[0]))
+  print('Usage: %s [-d] [-p <absolute path to project file>] <file>' % (sys.argv[0]))
 
 def main():
   global debug_mode
   global global_context
+  global project_file
 
   try:
-    opts, args = getopt.getopt(sys.argv[1:], 'd')
-
-    if len(args) != 1:
+    opts, args = getopt.getopt(sys.argv[1:], 'p:d', ['project_path=', 'debug='])
+    if len(args) < 1:
       usage()
 
       return 2
@@ -574,16 +576,36 @@ def main():
       if o == '-d':
         debug_mode = True
 
-  except getopt.GetoptError:
+      if o == '-p':
+        project_file =  '%s/engine.cfg' % (a)
+
+  except getopt.GetoptError as e:
+    print("ERROR: %s" % e)
     usage()
 
     return 2
 
   os.chdir(__path__)
+
   kwargs = dict(rel_to = __real_file__, postlex = GDScriptIndenter(), start = 'file_input')
   gd_parser = Lark.open('gd.lark', parser = 'lalr', **kwargs)
 
   input_text = _read(args[0]) + '\n'
+
+  if project_file != None and os.path.isfile(project_file):
+    config = configparser.RawConfigParser()
+    config.read(project_file)
+
+    if config.has_section('autoload'):
+      autoload_section = config.options('autoload')
+
+      for var_name in autoload_section:
+        # TODO
+        # Parse the global scripts and add them to the context
+        global_context['var'][var_name] = {
+          'value': config.get('autoload', var_name).replace('*res://', 'res://').replace('"', ''),
+          'type': None
+        }
 
   try:
     parsed_file = gd_parser.parse(input_text)

@@ -10,7 +10,7 @@
 //       eval_input is the input for the eval() functions.
 // NB: compound_stmt in single_input is followed by extra NEWLINE!
 single_input: _NEWLINE | simple_stmt | compound_stmt _NEWLINE
-file_input: (_NEWLINE)* (tooldef _NEWLINE extenddef | extenddef) (_NEWLINE | stmt)*
+file_input: (_NEWLINE)* (tooldef _NEWLINE extenddef | extenddef | stmt) (_NEWLINE | stmt)*
 eval_input: testlist _NEWLINE*
 
 decorator: "@" dotted_name [ "(" [arguments] ")" ] _NEWLINE

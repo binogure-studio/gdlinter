@@ -84,7 +84,7 @@ def _check_func_call(child, name, arguments):
   _output_debug('Calling function %s with arguments: %s' % (name, arguments))
   pass
 
-def _deep_check(children, local_context, item_type):
+def _deep_check(children, local_context, item_type, global_context_path = []):
   item_found = False
   relative_context_str = children[0].value
   relative_context = local_context[relative_context_str]
@@ -106,22 +106,33 @@ def _deep_check(children, local_context, item_type):
         break
 
     if not item_found:
-      var_type, var_context = _get_context(children[0].value)
+      var_type, var_context = _get_context(children[0].value, global_context_path)
 
       if var_type != None and var_context[var_type][children[0].value]['type'] != None:
         item_type = var_context[var_type][children[0].value]['type']
-        var_type, var_context = _get_context(var_context[var_type][children[0].value]['type'])
+        var_type, var_context = _get_context(var_context[var_type][children[0].value]['type'], global_context_path)
 
         if var_type != None:
+          do_done = False
           relative_context = var_context[var_type][item_type]
           look_for_items = ['var', 'const', 'func', 'enum', 'signal']
           child_value = children[1].value
 
-          for item_to_check in look_for_items:
-            if item_to_check in relative_context and child_value in relative_context[item_to_check]:
-              item_found = True
-              relative_context = relative_context[item_to_check][child_value]
-              break
+          # Check for inherited classes
+          while not item_found and not do_done:
+            do_done = True
+
+            for item_to_check in look_for_items:
+              if item_to_check in relative_context and child_value in relative_context[item_to_check]:
+                item_found = True
+                relative_context = relative_context[item_to_check][child_value]
+                break
+
+            if not item_found and 'extend' in relative_context:
+              item_type = relative_context['extend']
+              var_type, var_context = _get_context(item_type)
+              relative_context = var_context[var_type][item_type]
+              do_done = False
 
           for child in children[2:]:
             item_found = False
@@ -131,6 +142,7 @@ def _deep_check(children, local_context, item_type):
               relative_context = relative_context[relative_context_index]
               item_found = True
             else:
+              print('Item not found: %s' % (relative_context_str))
               break
 
       else:
@@ -169,12 +181,13 @@ def _deep_check(children, local_context, item_type):
     item_found = True
 
   elif item_type == 'signal':
-    # On cherche dans une fonction
+    # On cherche dans un signal
     pass
 
   if not item_found:
     error_message = ('%s not found' % (relative_context_str))
     _output_message('error', children[0], error_message)
+    exit(0)
 
 def _check_attr(children, global_context_path):
   first_item = children
@@ -187,7 +200,7 @@ def _check_attr(children, global_context_path):
       relative_context_key, relative_context = _get_context(first_item.value, global_context_path)
 
       if relative_context_key != None:
-        _deep_check(children, relative_context[relative_context_key], relative_context_key)
+        _deep_check(children, relative_context[relative_context_key], relative_context_key, global_context_path)
       else:
         error_message = ('%s not found' % (first_item.value))
         _output_message('error', first_item, error_message)
@@ -198,9 +211,12 @@ def _check_attr(children, global_context_path):
     if first_item.data == 'funccall':
       return _check_attr(first_item.children, global_context_path)
 
+    elif first_item.data == 'getattr':
+      return _check_attr(first_item.children, global_context_path)
+
     else:
-      _output_debug('?: %s, %s' % (first_item.children[0], global_context_path))
-      # exit(0)
+      _output_debug('?: %s, %s' % (first_item.children, global_context_path))
+      exit(0)
   else:
     _output_debug('?: %s, %s' % (first_item, global_context_path))
     exit(0)
@@ -611,8 +627,8 @@ def main():
     parsed_file = gd_parser.parse(input_text)
 
     analyze_tree(parsed_file, global_context)
-    check_context()
     # print(json.dumps(global_context, sort_keys = True, indent = 2))
+    check_context()
   except UnexpectedInput as error:
     _output_message('fatal', error, error.get_context(input_text))
 

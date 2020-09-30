@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import uuid
 import json
 import configparser
 import functools
@@ -27,7 +28,7 @@ class GDScriptIndenter(Indenter):
   DEDENT_type = '_DEDENT'
   tab_len = 2
 
-def _get_context(var_name, global_context_path = [], items_to_check = ['var', 'const', 'enum', 'func', 'class', 'signal']):
+def _get_context(var_name, global_context_path = [], items_to_check = ['class', 'var', 'const', 'enum', 'func', 'signal']):
   global global_context
 
   extended_classes = [global_context['extend']] if 'extend' in global_context else []
@@ -97,9 +98,15 @@ def _deep_check(children, local_context, item_type, global_context_path = []):
     for child in children[1:]:
       item_found = False
       relative_context_str += '.%s' % (child.value)
-      relative_context_index = relative_context.index(child.value) if child.value in relative_context else None
+      relative_context_index = None
+      
+      if hasattr(relative_context, 'index') and child.value in relative_context:
+        relative_context_index = relative_context.index(child.value)
 
-      if relative_context_index != None:
+      else:
+        break
+
+      if relative_context_index != None and relative_context[relative_context_index] != None:
         relative_context = relative_context[relative_context_index]
         item_found = True
       else:
@@ -115,7 +122,7 @@ def _deep_check(children, local_context, item_type, global_context_path = []):
         if var_type != None:
           do_done = False
           relative_context = var_context[var_type][item_type]
-          look_for_items = ['var', 'const', 'func', 'enum', 'signal']
+          look_for_items = ['class', 'var', 'const', 'func', 'enum', 'signal']
           child_value = children[1].value
 
           # Check for inherited classes
@@ -185,7 +192,7 @@ def _deep_check(children, local_context, item_type, global_context_path = []):
     pass
 
   if not item_found:
-    error_message = ('%s not found' % (relative_context_str))
+    error_message = ('%s not found!' % (relative_context_str))
     _output_message('error', children[0], error_message)
     exit(0)
 
@@ -235,6 +242,14 @@ def _is_class_name(class_name):
 def _get_item_type():
   pass
 
+def _extract_parameters(children):
+  parameters = []
+
+  for child in children.children:
+    parameters.append(child.value)
+
+  return parameters
+
 def _extract_assignation(children, global_context_path):
   global _attributes_to_check
 
@@ -271,7 +286,13 @@ def _extract_assignation(children, global_context_path):
       elif fc_name == 'preload' or fc_name == 'load':
         fc_type = 'Resource'
 
-        if fc_arguments[0].endswith('.png\'') or fc_arguments[0].endswith('.tex\''):
+        if fc_arguments[0] == None:
+          pass
+
+        elif fc_arguments[0].endswith('.gd\''):
+          fc_type = 'GDScript'
+
+        elif fc_arguments[0].endswith('.png\'') or fc_arguments[0].endswith('.tex\''):
           fc_type = 'Texture'
 
         elif fc_arguments[0].endswith('.tscn\'') or fc_arguments[0].endswith('.scn\''):
@@ -341,7 +362,7 @@ def _extract_assignation(children, global_context_path):
 def _check_duplicate(item_type, item_context, item_name, global_context_path):
   global global_context
 
-  items_to_check = ['var', 'const', 'enum', 'func', 'class']
+  items_to_check = ['class', 'var', 'const', 'enum', 'func', 'signal']
   error_detected = False
 
   for context_key in items_to_check:
@@ -365,7 +386,12 @@ def _check_duplicate(item_type, item_context, item_name, global_context_path):
 
   if error_detected:
     error_message = ('\'%s\' shadowing' % (item_name))
-    _output_message('error', item_context.children[0], error_message)
+
+    if isinstance(item_context, Tree):
+      _output_message('error', item_context.children[0], error_message)
+
+    else:
+      _output_message('error', item_context, error_message)
 
 def _extract_var(children):
   var_name_found = False
@@ -423,6 +449,15 @@ def _output_message(level, node, message):
     message
   ))
 
+def goto_context(context_path):
+  global global_context
+  context = global_context
+
+  for key in context_path:
+    context = context[key]
+
+  return context
+
 def analyze_tree(tree, context, context_path = []):
   global global_context
   global _attributes_to_check
@@ -432,7 +467,8 @@ def analyze_tree(tree, context, context_path = []):
       continue
 
     elif child.data == 'suite' or child.data == 'compound_stmt' or child.data == 'return_stmt':
-      analyze_tree(Tree(child.children[0].data, child.children), context, context_path)
+      if len(child.children) > 0:
+        analyze_tree(Tree(child.children[0].data, child.children), context, context_path)
 
     elif child.data == 'extenddef':
 
@@ -486,6 +522,9 @@ def analyze_tree(tree, context, context_path = []):
 
       analyze_tree(Tree(class_name, child.children[1:]), context['class'][class_name], new_context_path)
 
+    elif child.data == 'static_funcdef':
+      analyze_tree(Tree(child.children[0].data, child.children), context, context_path)
+
     elif child.data == 'funcdef':
       func_name = child.children[0].value
 
@@ -519,7 +558,28 @@ def analyze_tree(tree, context, context_path = []):
         }
 
     elif child.data == 'if_stmt':
-      pass
+      # TODO
+      # - Analyze the if statement itself
+      block_name = str(uuid.uuid4())
+      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      context['block'][block_name] = {}
+      new_context_path = context_path + ['block', block_name]
+
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
+
+    elif child.data == 'else_stmt' or child.data == 'elif_stmt' or child.data == 'first_elif_stmt':
+      # Remove the last 2 arguments
+      if child.data == 'first_elif_stmt':
+        context_path.pop()
+        context_path.pop()
+        context = goto_context(context_path)
+      
+      block_name = str(uuid.uuid4())
+      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      context['block'][block_name] = {}
+      new_context_path = context_path + ['block', block_name]
+
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
 
     elif child.data == 'funccall':
       _attributes_to_check.append({
@@ -528,13 +588,45 @@ def analyze_tree(tree, context, context_path = []):
       })
 
     elif child.data == 'for_stmt':
-      pass
+      # Create the new block
+      block_name = str(uuid.uuid4())
+      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      context['block'][block_name] = {}
+      new_context_path = context_path + ['block', block_name]
+
+      var_name = child.children[0].children[0].value
+      # TODO
+      # Add the var to a separated context in order to prevent it from leaking
+      _add_item_to_context('var', context['block'][block_name], var_name, child.children[0], new_context_path)
+      context['block'][block_name]['var'][var_name] = {
+        'value': None,
+        'type': None
+      }
+
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
 
     elif child.data == 'while_stmt':
-      pass
+      # TODO
+      # - Analyze the while statement itself
+      block_name = str(uuid.uuid4())
+      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      context['block'][block_name] = {}
+      new_context_path = context_path + ['block', block_name]
+
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
 
     elif child.data == 'signal':
-      pass
+      signal_name = child.children[0].value
+      parameters = []
+
+      if len(child.children) > 1:
+        parameters = _extract_parameters(child.children[1])
+
+      _add_item_to_context('signal', context, signal_name, child.children[0], context_path)
+
+      context['signal'][signal_name] = {
+        'parameters': parameters
+      }
 
     elif child.data == 'funcdef_extend':
       pass

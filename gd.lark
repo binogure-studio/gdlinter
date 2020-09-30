@@ -13,10 +13,6 @@ single_input: _NEWLINE | simple_stmt | compound_stmt _NEWLINE
 file_input: (_NEWLINE)* (tooldef _NEWLINE extenddef | extenddef | stmt) (_NEWLINE | stmt)*
 eval_input: testlist _NEWLINE*
 
-decorator: "@" dotted_name [ "(" [arguments] ")" ] _NEWLINE
-decorators: decorator+
-decorated: decorators (funcdef | static_funcdef | classdef | signaldef)
-
 tooldef: "tool" -> tool
 static_funcdef: "static" funcdef
 funcdef: "func" NAME "(" parameters? ")" [funcdef_extend] ":" suite
@@ -60,10 +56,13 @@ const_stmt: "const" NAME "=" test -> const
 global_stmt: "global" NAME ("," NAME)*
 assert_stmt: "assert" test ["," test]
 
-compound_stmt: if_stmt | while_stmt | for_stmt | funcdef | classdef | signaldef | decorated
-if_stmt: "if" test ":" suite ("elif" test ":" suite)* ["else" ":" suite]
-while_stmt: "while" test ":" suite ["else" ":" suite]
-for_stmt: "for" exprlist "in" testlist ":" suite ["else" ":" suite]
+compound_stmt: if_stmt | while_stmt | for_stmt | funcdef | static_funcdef | classdef | signaldef
+if_stmt: "if" test ":" suite (first_elif_stmt)* [else_stmt]
+first_elif_stmt: "elif" test ":" suite (elif_stmt)*
+elif_stmt: "elif" test ":" suite
+else_stmt: "else" ":" suite
+while_stmt: "while" test ":" suite
+for_stmt: "for" exprlist "in" testlist ":" suite
 // NB compile.c makes sure that the default except clause is last
 suite: simple_stmt | _NEWLINE _INDENT stmt+ _DEDENT
 
@@ -90,9 +89,10 @@ suite: simple_stmt | _NEWLINE _INDENT stmt+ _DEDENT
 // sake of a __future__ import described in PEP 401 (which really works :-)
 !_comp_op: "<"|">"|"=="|">="|"<="|"<>"|"!="|"in"|"not" "in"|"is"|"is" "not"
 
-?atom_expr: atom_expr "(" [arguments] ")"      -> funccall
+?atom_expr: atom_expr "(" [arguments] ")"    -> funccall
           | atom_expr "[" subscriptlist "]"  -> getitem
           | atom_expr "." NAME               -> getattr
+          | "." NAME                         -> funccall
           | atom
 
 ?atom: "(" [yield_expr|testlist_comp] ")" -> tuple

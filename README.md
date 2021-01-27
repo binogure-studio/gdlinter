@@ -27,9 +27,9 @@ python3 ./parser.py path-to-file.gd
 
 - [x] Lark grammar for GDscript
 - [ ] Parse function call
-- [ ] Parse `for` statement
-- [ ] Parse `while` statement
-- [ ] Parse `if` statement
+- [x] Parse `for` statement
+- [x] Parse `while` statement
+- [x] Parse `if` statement
 - [x] *Parse `expr` statement (partial)
 - [x] Parse function definition
 - [x] Parse var/const/enum declaration
@@ -38,3 +38,4 @@ python3 ./parser.py path-to-file.gd
 - [x] Detect undefined variable usage (simple)
 - [x] Detect undefined variable usage (deep check)
 - [ ] Detect unused variables
+- [ ] Deep check inheritance

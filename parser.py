@@ -93,8 +93,11 @@ def _deep_check(children, local_context, item_type, global_context_path = []):
   if relative_context == None:
     pass
 
-  elif item_type == 'var' or item_type == 'const' or item_type == 'enum':
+  elif len(children) == 1 and (item_type == 'var' or item_type == 'const' or item_type == 'enum'):
+    var_type, var_context = _get_context(children[0].value, global_context_path)
+    item_found = relative_context_str in var_context[var_type]
 
+  elif item_type == 'var' or item_type == 'const' or item_type == 'enum':
     for child in children[1:]:
       item_found = False
       relative_context_str += '.%s' % (child.value)
@@ -393,6 +396,26 @@ def _check_duplicate(item_type, item_context, item_name, global_context_path):
     else:
       _output_message('error', item_context, error_message)
 
+def _extract_test_stmt(children, context, context_path):
+  global _attributes_to_check
+
+  if isinstance(children, Token):
+    if (children.type == 'NAME' and children.value != 'true' and children.value != 'false'):
+      _attributes_to_check.append({
+        'child': [children],
+        'context': [] + context_path
+    })
+
+  elif children.data == 'getattr':
+    _attributes_to_check.append({
+      'child': children,
+      'context': [] + context_path
+    })
+
+  else:
+    for child in children.children:
+      _extract_test_stmt(child, context, context_path)
+
 def _extract_var(children):
   var_name_found = False
   var_name = ''
@@ -558,8 +581,9 @@ def analyze_tree(tree, context, context_path = []):
         }
 
     elif child.data == 'if_stmt':
-      # TODO
       # - Analyze the if statement itself
+      _extract_test_stmt(child.children[0], context, context_path)
+
       block_name = str(uuid.uuid4())
       _add_item_to_context('block', context, block_name, child.children[0], context_path)
       context['block'][block_name] = {}
@@ -574,6 +598,9 @@ def analyze_tree(tree, context, context_path = []):
         context_path.pop()
         context = goto_context(context_path)
       
+      if child.data == 'elif_stmt' or child.data == 'first_elif_stmt':
+        _extract_test_stmt(child.children[0], context, context_path)
+
       block_name = str(uuid.uuid4())
       _add_item_to_context('block', context, block_name, child.children[0], context_path)
       context['block'][block_name] = {}
@@ -606,8 +633,9 @@ def analyze_tree(tree, context, context_path = []):
       analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
 
     elif child.data == 'while_stmt':
-      # TODO
       # - Analyze the while statement itself
+      _extract_test_stmt(child.children[0], context, context_path)
+
       block_name = str(uuid.uuid4())
       _add_item_to_context('block', context, block_name, child.children[0], context_path)
       context['block'][block_name] = {}

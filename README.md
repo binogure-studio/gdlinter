@@ -38,4 +38,4 @@ python3 ./parser.py path-to-file.gd
 - [x] Detect undefined variable usage (simple)
 - [x] Detect undefined variable usage (deep check)
 - [ ] Detect unused variables
-- [ ] Deep check inheritance
+- [x] Deep check inheritance

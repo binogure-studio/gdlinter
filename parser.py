@@ -15,6 +15,7 @@ from lark.indenter import Indenter
 __real_file__ = os.path.realpath(__file__)
 __path__ = os.path.dirname(__real_file__)
 
+root_folder = os.getcwd()
 project_file = None
 debug_mode = False
 global_context = godot_loader.get_context()
@@ -253,7 +254,7 @@ def _extract_parameters(children):
 
   return parameters
 
-def _extract_assignation(children, global_context_path):
+def _extract_assignation(children, analyze_items, global_context_path):
   global _attributes_to_check
 
   if isinstance(children, list):
@@ -273,9 +274,9 @@ def _extract_assignation(children, global_context_path):
       # Not working correctly
       for child in children.children:
         if index == 0:
-          fc_name, _ = _extract_assignation(child, global_context_path)
+          fc_name, _ = _extract_assignation(child, analyze_items, global_context_path)
         else:
-          arg_name, _ = _extract_assignation(child, global_context_path)
+          arg_name, _ = _extract_assignation(child, analyze_items, global_context_path)
 
           fc_arguments.append(arg_name)
         index += 1
@@ -289,7 +290,7 @@ def _extract_assignation(children, global_context_path):
       elif fc_name == 'preload' or fc_name == 'load':
         fc_type = 'Resource'
 
-        if fc_arguments[0] == None:
+        if len(fc_arguments) < 1 or fc_arguments[0] == None:
           pass
 
         elif fc_arguments[0].endswith('.gd\''):
@@ -313,16 +314,17 @@ def _extract_assignation(children, global_context_path):
       return {}, 'Dictionary'
 
     elif children.data == 'getattr':
-      _attributes_to_check.append({
-        'child': children.children,
-        'context': [] + global_context_path
-      })
+      if analyze_items:
+        _attributes_to_check.append({
+          'child': children.children,
+          'context': [] + global_context_path
+        })
 
-      return _extract_assignation(children.children[0], global_context_path)
+      return _extract_assignation(children.children[0], analyze_items, global_context_path)
 
     elif children.data == 'arguments' or children.data == 'string' \
       or children.data == 'number':
-      return _extract_assignation(children.children[0], global_context_path)
+      return _extract_assignation(children.children[0], analyze_items, global_context_path)
 
   elif isinstance(children, Token):
     if children.type == 'STRING' or children.type == 'LONG_STRING':
@@ -396,8 +398,13 @@ def _check_duplicate(item_type, item_context, item_name, global_context_path):
     else:
       _output_message('error', item_context, error_message)
 
-def _extract_test_stmt(children, context, context_path):
+def _extract_test_stmt(children, context, analyze_items, context_path):
   global _attributes_to_check
+
+  # Guardian clause
+  # We dont' analyze any parent items
+  if not analyze_items:
+    return
 
   if isinstance(children, Token):
     if (children.type == 'NAME' and children.value != 'true' and children.value != 'false'):
@@ -414,7 +421,7 @@ def _extract_test_stmt(children, context, context_path):
 
   else:
     for child in children.children:
-      _extract_test_stmt(child, context, context_path)
+      _extract_test_stmt(child, context, analyze_items, context_path)
 
 def _extract_var(children):
   var_name_found = False
@@ -431,13 +438,14 @@ def _extract_var(children):
 
   return var_name, remaining_children
 
-def _add_item_to_context(_type, _context, _key, first_child, _context_path):
+def _add_item_to_context(_type, _context, _key, first_child, _analyze_items, _context_path):
   if not _type in _context:
     _context[_type] = {}
 
-  _check_duplicate(_type, first_child, _key, _context_path)
+  if _analyze_items:
+    _check_duplicate(_type, first_child, _key, _context_path)
 
-def assign_var(children, global_context_path):
+def assign_var(children, analyze_items, global_context_path):
   if isinstance(children[0], Token):
     if children[0].type == 'NAME':
       var_name = children[0].value
@@ -449,14 +457,14 @@ def assign_var(children, global_context_path):
 
       else:
         var_ref = relative_context[relative_context_key]
-        var_value, var_type = _extract_assignation(children[1:], global_context_path)
+        var_value, var_type = _extract_assignation(children[1:], analyze_items, global_context_path)
 
         var_ref[var_name] = {
           'value': var_value,
           'type': var_type
         }
   else:
-    assign_var(children[0].children, global_context_path)
+    assign_var(children[0].children, analyze_items, global_context_path)
 
 def _output_message(level, node, message):
   global debug_mode
@@ -481,7 +489,7 @@ def goto_context(context_path):
 
   return context
 
-def analyze_tree(tree, context, context_path = []):
+def analyze_tree(tree, context, analyze_items = True, context_path = []):
   global global_context
   global _attributes_to_check
 
@@ -491,23 +499,27 @@ def analyze_tree(tree, context, context_path = []):
 
     elif child.data == 'suite' or child.data == 'compound_stmt' or child.data == 'return_stmt':
       if len(child.children) > 0:
-        analyze_tree(Tree(child.children[0].data, child.children), context, context_path)
+        analyze_tree(Tree(child.children[0].data, child.children), context, analyze_items, context_path)
 
-    elif child.data == 'extenddef':
+    elif child.data == 'extenddef' or child.data == 'file_extenddef_class':
 
       context['extend'] = child.children[0].value
+
+    elif child.data == 'file_extenddef_file':
+
+      load_file(child.children[0], child.children[0].value)
 
     elif child.data == 'enum':
       enum_name = child.children[0].value
 
-      _add_item_to_context('enum', context, enum_name, child.children[0], context_path)
+      _add_item_to_context('enum', context, enum_name, child.children[0], analyze_items, context_path)
       context['enum'][enum_name] = functools.reduce(_extract_enum, child.children[1].children, [])
 
     elif child.data == 'const':
       const_name = child.children[0].value
 
-      _add_item_to_context('const', context, const_name, child.children[0], context_path)
-      const_value, const_type = _extract_assignation(child.children[1].children, context_path)
+      _add_item_to_context('const', context, const_name, child.children[0], analyze_items, context_path)
+      const_value, const_type = _extract_assignation(child.children[1].children, analyze_items, context_path)
       context['const'][const_name] = {
         'value': const_value,
         'type': const_type
@@ -516,8 +528,8 @@ def analyze_tree(tree, context, context_path = []):
     elif child.data == 'var_stmt':
       var_name, assignation_data = _extract_var(child.children)
 
-      _add_item_to_context('var', context, var_name, child.children[0], context_path)
-      var_value, var_type = _extract_assignation(assignation_data, context_path)
+      _add_item_to_context('var', context, var_name, child.children[0], analyze_items, context_path)
+      var_value, var_type = _extract_assignation(assignation_data, analyze_items, context_path)
       context['var'][var_name] = {
         'value': var_value,
         'type': var_type
@@ -526,7 +538,7 @@ def analyze_tree(tree, context, context_path = []):
     elif child.data == 'classdef':
       class_name = child.children[0].value
 
-      _add_item_to_context('class', context, class_name, child.children[0], context_path)
+      _add_item_to_context('class', context, class_name, child.children[0], analyze_items, context_path)
       context['class'][class_name] = {
         'func': {
           'new': {
@@ -543,23 +555,23 @@ def analyze_tree(tree, context, context_path = []):
       }
       new_context_path = context_path + ['class', class_name]
 
-      analyze_tree(Tree(class_name, child.children[1:]), context['class'][class_name], new_context_path)
+      analyze_tree(Tree(class_name, child.children[1:]), context['class'][class_name], analyze_items, new_context_path)
 
     elif child.data == 'static_funcdef':
-      analyze_tree(Tree(child.children[0].data, child.children), context, context_path)
+      analyze_tree(Tree(child.children[0].data, child.children), context, analyze_items, context_path)
 
     elif child.data == 'funcdef':
       func_name = child.children[0].value
 
       # Check that the func does not already exists
-      _add_item_to_context('func', context, func_name, child.children[0], context_path)
+      _add_item_to_context('func', context, func_name, child.children[0], analyze_items, context_path)
       context['func'][func_name] = {}
       new_context_path = context_path + ['func', func_name]
 
-      analyze_tree(Tree(func_name, child.children[1:]), context['func'][func_name], new_context_path)
+      analyze_tree(Tree(func_name, child.children[1:]), context['func'][func_name], analyze_items, new_context_path)
 
     elif child.data == 'expr_stmt':
-      assign_var(child.children, context_path)
+      assign_var(child.children, analyze_items, context_path)
 
     elif child.data == 'parameters':
       for subchild in child.children:
@@ -569,11 +581,11 @@ def analyze_tree(tree, context, context_path = []):
 
         if isinstance(subchild, Tree):
           varname = subchild.children[0].value
-          var_value, var_type = _extract_assignation(subchild.children[1:], context_path)
+          var_value, var_type = _extract_assignation(subchild.children[1:], analyze_items, context_path)
         else:
           var_value = subchild.value
 
-        _add_item_to_context('var', context, varname, child, context_path)
+        _add_item_to_context('var', context, varname, child, analyze_items, context_path)
         context['var'][varname] = {
           'value': var_value,
           'type': var_type,
@@ -582,14 +594,14 @@ def analyze_tree(tree, context, context_path = []):
 
     elif child.data == 'if_stmt':
       # - Analyze the if statement itself
-      _extract_test_stmt(child.children[0], context, context_path)
+      _extract_test_stmt(child.children[0], context, analyze_items, context_path)
 
       block_name = str(uuid.uuid4())
-      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      _add_item_to_context('block', context, block_name, child.children[0], analyze_items, context_path)
       context['block'][block_name] = {}
       new_context_path = context_path + ['block', block_name]
 
-      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], analyze_items, new_context_path)
 
     elif child.data == 'else_stmt' or child.data == 'elif_stmt' or child.data == 'first_elif_stmt':
       # Remove the last 2 arguments
@@ -599,49 +611,50 @@ def analyze_tree(tree, context, context_path = []):
         context = goto_context(context_path)
       
       if child.data == 'elif_stmt' or child.data == 'first_elif_stmt':
-        _extract_test_stmt(child.children[0], context, context_path)
+        _extract_test_stmt(child.children[0], context, analyze_items, context_path)
 
       block_name = str(uuid.uuid4())
-      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      _add_item_to_context('block', context, block_name, child.children[0], analyze_items, context_path)
       context['block'][block_name] = {}
       new_context_path = context_path + ['block', block_name]
 
-      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], analyze_items, new_context_path)
 
     elif child.data == 'funccall':
-      _attributes_to_check.append({
-        'child': child,
-        'context': [] + context_path
-      })
+      if analyze_items:
+        _attributes_to_check.append({
+          'child': child,
+          'context': [] + context_path
+        })
 
     elif child.data == 'for_stmt':
       # Create the new block
       block_name = str(uuid.uuid4())
-      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      _add_item_to_context('block', context, block_name, child.children[0], analyze_items, context_path)
       context['block'][block_name] = {}
       new_context_path = context_path + ['block', block_name]
 
       var_name = child.children[0].children[0].value
       # TODO
       # Add the var to a separated context in order to prevent it from leaking
-      _add_item_to_context('var', context['block'][block_name], var_name, child.children[0], new_context_path)
+      _add_item_to_context('var', context['block'][block_name], var_name, child.children[0], analyze_items, new_context_path)
       context['block'][block_name]['var'][var_name] = {
         'value': None,
         'type': None
       }
 
-      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], analyze_items, new_context_path)
 
     elif child.data == 'while_stmt':
       # - Analyze the while statement itself
-      _extract_test_stmt(child.children[0], context, context_path)
+      _extract_test_stmt(child.children[0], context, analyze_items, context_path)
 
       block_name = str(uuid.uuid4())
-      _add_item_to_context('block', context, block_name, child.children[0], context_path)
+      _add_item_to_context('block', context, block_name, child.children[0], analyze_items, context_path)
       context['block'][block_name] = {}
       new_context_path = context_path + ['block', block_name]
 
-      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], new_context_path)
+      analyze_tree(Tree('block', child.children[1:]), context['block'][block_name], analyze_items, new_context_path)
 
     elif child.data == 'signal':
       signal_name = child.children[0].value
@@ -650,7 +663,7 @@ def analyze_tree(tree, context, context_path = []):
       if len(child.children) > 1:
         parameters = _extract_parameters(child.children[1])
 
-      _add_item_to_context('signal', context, signal_name, child.children[0], context_path)
+      _add_item_to_context('signal', context, signal_name, child.children[0], analyze_items, context_path)
 
       context['signal'][signal_name] = {
         'parameters': parameters
@@ -696,10 +709,38 @@ def usage():
   print('\nGDScript\n')
   print('Usage: %s [-d] [-p <absolute path to project file>] <file>' % (sys.argv[0]))
 
+def load_file(children, filename):
+  global root_folder
+  global global_context
+  global file_analyzing
+
+  os.chdir(__path__)
+
+  kwargs = dict(rel_to = __real_file__, postlex = GDScriptIndenter(), start = 'file_input')
+  gd_parser = Lark.open('gd.lark', parser = 'lalr', **kwargs)
+  computed_filename = filename.replace('res:/', root_folder, 1).replace('\'', '', 2)
+
+  if file_analyzing != computed_filename:
+    input_text = _read(computed_filename) + '\n'
+
+    try:
+      parsed_file = gd_parser.parse(input_text)
+
+      analyze_tree(parsed_file, global_context, False)
+      # print(json.dumps(global_context, sort_keys = True, indent = 2))
+      # check_context()
+    except UnexpectedInput as error:
+      _output_message('fatal', error, error.get_context(input_text))
+
+  else:
+    _output_message('error', children, 'Cyclic dependencies')
+
 def main():
   global debug_mode
   global global_context
   global project_file
+  global root_folder
+  global file_analyzing
 
   try:
     opts, args = getopt.getopt(sys.argv[1:], 'p:d', ['project_path=', 'debug='])
@@ -713,6 +754,7 @@ def main():
         debug_mode = True
 
       if o == '-p':
+        root_folder = a
         project_file =  '%s/engine.cfg' % (a)
 
   except getopt.GetoptError as e:
@@ -725,8 +767,8 @@ def main():
 
   kwargs = dict(rel_to = __real_file__, postlex = GDScriptIndenter(), start = 'file_input')
   gd_parser = Lark.open('gd.lark', parser = 'lalr', **kwargs)
-
-  input_text = _read(args[0]) + '\n'
+  file_analyzing = args[0]
+  input_text = _read(file_analyzing) + '\n'
 
   if project_file != None and os.path.isfile(project_file):
     config = configparser.RawConfigParser()

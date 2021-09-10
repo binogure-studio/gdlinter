@@ -10,7 +10,8 @@
 //       eval_input is the input for the eval() functions.
 // NB: compound_stmt in single_input is followed by extra NEWLINE!
 single_input: _NEWLINE | simple_stmt | compound_stmt _NEWLINE
-file_input: (_NEWLINE)* (tooldef _NEWLINE extenddef | extenddef | stmt) (_NEWLINE | stmt)*
+file_input: (_NEWLINE)* (tooldef _NEWLINE (file_extenddef_class | file_extenddef_file) | (file_extenddef_class | file_extenddef_file) | stmt) (_NEWLINE | stmt)*
+
 eval_input: testlist _NEWLINE*
 
 tooldef: "tool" -> tool
@@ -117,6 +118,9 @@ dictorsetmaker: ( (test (":" | "=") test (comp_for | ("," test (":" | "=") test)
 
 classdef: "class" NAME extenddef? ":" suite
 extenddef: "extends" (NAME | STRING)
+
+file_extenddef_class: "extends" NAME
+file_extenddef_file: "extends" STRING
 
 arguments: argvalue ("," argvalue)*
          | test comp_for

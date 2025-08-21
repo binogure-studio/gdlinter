@@ -391,12 +391,12 @@ def _check_duplicate(item_type, item_context, item_name, global_context_path):
 
   if error_detected:
     error_message = ('\'%s\' shadowing' % (item_name))
+    consolidated_context = item_context
 
-    if isinstance(item_context, Tree):
-      _output_message('error', item_context.children[0], error_message)
-
-    else:
-      _output_message('error', item_context, error_message)
+    while isinstance(consolidated_context, Tree):
+      consolidated_context = consolidated_context.children[0]
+    
+    _output_message('error', consolidated_context, error_message)
 
 def _extract_test_stmt(children, context, analyze_items, context_path):
   global _attributes_to_check
@@ -421,6 +421,9 @@ def _extract_test_stmt(children, context, analyze_items, context_path):
 
   else:
     for child in children.children:
+      if child is None:
+        continue
+
       _extract_test_stmt(child, context, analyze_items, context_path)
 
 def _extract_var(children):
@@ -432,7 +435,10 @@ def _extract_var(children):
     if var_name_found:
       remaining_children = child
       break
-    elif child.data == 'var':
+    elif child is None:
+      continue
+
+    elif hasattr(child, 'data') and child.data == 'var':
       var_name = child.children[0].value
       var_name_found = True
 
@@ -494,11 +500,11 @@ def analyze_tree(tree, context, analyze_items = True, context_path = []):
   global _attributes_to_check
 
   for child in tree.children:
-    if child.data == 'tool' or child.data == 'noop':
+    if child is None or child.data == 'tool' or child.data == 'noop':
       continue
 
     elif child.data == 'suite' or child.data == 'compound_stmt' or child.data == 'return_stmt':
-      if len(child.children) > 0:
+      if len(child.children) > 0 and child.children[0] is not None:
         analyze_tree(Tree(child.children[0].data, child.children), context, analyze_items, context_path)
 
     elif child.data == 'extenddef' or child.data == 'file_extenddef_class':
@@ -528,7 +534,10 @@ def analyze_tree(tree, context, analyze_items = True, context_path = []):
     elif child.data == 'var_stmt':
       var_name, assignation_data = _extract_var(child.children)
 
-      _add_item_to_context('var', context, var_name, child.children[0], analyze_items, context_path)
+      if assignation_data is None:
+        _add_item_to_context('var', context, var_name, child.children[0], analyze_items, context_path)
+      else:
+        _add_item_to_context('var', context, var_name, assignation_data.children[0], analyze_items, context_path)
       var_value, var_type = _extract_assignation(assignation_data, analyze_items, context_path)
       context['var'][var_name] = {
         'value': var_value,
@@ -580,8 +589,8 @@ def analyze_tree(tree, context, analyze_items = True, context_path = []):
         var_type = None
 
         if isinstance(subchild, Tree):
-          varname = subchild.children[0].value
-          var_value, var_type = _extract_assignation(subchild.children[1:], analyze_items, context_path)
+            varname = subchild.children[0].children[0].value
+            var_value, var_type = _extract_assignation(subchild.children[1:], analyze_items, context_path)
         else:
           var_value = subchild.value
 
